@@ -18,3 +18,4 @@ __pycache__/
 
 # Ignore Mac system files
 .DS_Store
+reports/
