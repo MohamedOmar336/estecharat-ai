@@ -1,4 +1,6 @@
+import os
 import requests
+from datetime import datetime
 from langchain.tools import tool
 from config import JAVA_BACKEND_URL, INTERNAL_API_SECRET
 
@@ -85,5 +87,28 @@ def get_doctor_availability(doctor_id: str) -> str:
     except Exception as e:
         return f"Error fetching doctor availability: {str(e)}"
 
+@tool
+def save_patient_report(session_id: str, summary: str) -> str:
+    """
+    Generate and save a summary report of what the patient was looking for.
+    Use this tool at the very end of the consultation.
+    Args:
+        session_id: The session ID of the user.
+        summary: A comprehensive summary of the patient's symptoms, requests, and the outcome/recommendations given.
+    """
+    try:
+        os.makedirs("reports", exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"reports/report_{session_id}_{timestamp}.md"
+        
+        content = f"# Patient Consultation Report\n\n**Session ID:** {session_id}\n**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n## Summary\n{summary}\n"
+        
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(content)
+            
+        return f"Successfully saved patient report to {filename}"
+    except Exception as e:
+        return f"Error saving report: {str(e)}"
+
 # List of all tools to bind to the agent
-all_tools = [get_specialties, search_doctors, get_doctor_details, get_faqs, get_doctor_availability]
+all_tools = [get_specialties, search_doctors, get_doctor_details, get_faqs, get_doctor_availability, save_patient_report]

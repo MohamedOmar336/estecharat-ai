@@ -29,7 +29,10 @@ async def chat_endpoint(request: ChatRequest):
     try:
         # Invoke the LangChain agent with the memory session context
         response = ai_agent.invoke(
-            {"input": request.message},
+            {
+                "input": request.message,
+                "session_id": request.session_id
+            },
             config={"configurable": {"session_id": request.session_id}}
         )
         return ChatResponse(reply=response["output"])
