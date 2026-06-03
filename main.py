@@ -1,9 +1,14 @@
-from fastapi import FastAPI, HTTPException
+import os
+import tempfile
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from agent import ai_agent
 from fastapi.middleware.cors import CORSMiddleware
+from config import OPENAI_API_KEY
+from openai import OpenAI
 
 app = FastAPI(title="Estecharat AI Assistant", version="1.0")
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Setup CORS for local testing/frontend access
 app.add_middleware(
@@ -36,6 +41,52 @@ async def chat_endpoint(request: ChatRequest):
             config={"configurable": {"session_id": request.session_id}}
         )
         return ChatResponse(reply=response["output"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class VoiceResponse(BaseModel):
+    reply: str
+    transcribed_text: str
+
+@app.post("/api/ai/voice", response_model=VoiceResponse)
+async def voice_endpoint(session_id: str = Form(...), audio: UploadFile = File(...)):
+    try:
+        # Save uploaded file temporarily
+        suffix = ".webm"
+        if audio.filename:
+            _, ext = os.path.splitext(audio.filename)
+            if ext:
+                suffix = ext
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_audio:
+            content = await audio.read()
+            temp_audio.write(content)
+            temp_audio_path = temp_audio.name
+
+        # Transcribe using OpenAI Whisper
+        with open(temp_audio_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file,
+                prompt="مرحباً. دكتور، مستشفى، ألم، علاج. Hello. Doctor, hospital, pain, treatment."
+            )
+        
+        # Delete temp file
+        os.remove(temp_audio_path)
+
+        transcribed_text = transcript.text
+        if not transcribed_text:
+             raise HTTPException(status_code=400, detail="Could not transcribe audio")
+
+        # Invoke the LangChain agent with the memory session context
+        response = ai_agent.invoke(
+            {
+                "input": transcribed_text,
+                "session_id": session_id
+            },
+            config={"configurable": {"session_id": session_id}}
+        )
+        return VoiceResponse(reply=response["output"], transcribed_text=transcribed_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
